@@ -5,30 +5,34 @@ from flask import Flask, jsonify, request, send_from_directory
 from flask_jwt_extended import JWTManager, create_access_token, jwt_required, get_jwt_identity
 from dotenv import load_dotenv
 
-
 load_dotenv()
 
 app = Flask(__name__)
 CORS(app)
 
-app = Flask(__name__)
-CORS(app)
+app.config["JWT_SECRET_KEY"] = os.getenv('JWT_SECRET')
+jwt = JWTManager(app)
 
-PASTA_UPLOADS = 'uploads'
-# Adicione esta linha para evitar o erro de pasta ausente:
+# --- AJUSTE DE AMBIENTE PARA VERCEL ---
+# Se estiver rodando na Vercel, usamos a pasta temporária /tmp devido ao sistema de arquivos Read-Only
+if os.environ.get('VERCEL'):
+    PASTA_UPLOADS = '/tmp/uploads'
+    CAMINHO_BANCO = '/tmp/banco.db'
+else:
+    # Se estiver rodando no seu computador local
+    PASTA_UPLOADS = 'uploads'
+    CAMINHO_BANCO = 'banco.db'
+
+# Cria a pasta de uploads se ela não existir (dentro de /tmp se for na Vercel)
 if not os.path.exists(PASTA_UPLOADS):
     os.makedirs(PASTA_UPLOADS)
 
 app.config['UPLOAD_FOLDER'] = PASTA_UPLOADS
 
-app.config["JWT_SECRET_KEY"] = os.getenv('JWT_SECRET')
-jwt = JWTManager(app)
-
-
 # --- CONFIGURAÇÃO DO BANCO DE DADOS (SQLite) ---
 def iniciar_banco():
-    # Cria (ou abre) o arquivo "banco.db" na mesma pasta do projeto
-    conexao = sqlite3.connect('banco.db')
+    # Cria (ou abre) o arquivo no caminho dinâmico configurado acima
+    conexao = sqlite3.connect(CAMINHO_BANCO)
     cursor = conexao.cursor()
     
     # Cria a tabela de stickers se ela não existir
@@ -44,15 +48,7 @@ def iniciar_banco():
     conexao.close()
 
 # Executa a função para criar o banco de dados assim que o código roda
-def iniciar_banco():
-    # Em ambiente de produção na Vercel, usa a pasta /tmp
-    if os.environ.get('VERCEL'):
-        caminho_banco = '/tmp/banco.db'
-    else:
-        caminho_banco = 'banco.db'
-        
-    conexao = sqlite3.connect(caminho_banco)
-    # ... resto do seu código de iniciar o banco
+iniciar_banco()
 
 # rota de boas vindas
 @app.route('/')
@@ -90,13 +86,12 @@ def criar_sticker():
     if not nome or not pontos_custo or not arquivo_imagem:
         return jsonify({'mensagem': 'Nome, pontos e imagem são obrigatórios!'}), 400
     
-    # salva o arquivo fisico da imagem na pasta 'uploads'
-    # usa o nome original do arquivo do usuario
+    # salva o arquivo fisico da imagem na pasta configurada
     caminho_final_imagem = os.path.join(app.config['UPLOAD_FOLDER'], arquivo_imagem.filename)
     arquivo_imagem.save(caminho_final_imagem)
 
-    # salva as info no bd
-    conexao = sqlite3.connect('banco.db')
+    # salva as info no bd usando o caminho dinâmico
+    conexao = sqlite3.connect(CAMINHO_BANCO)
     cursor = conexao.cursor()
     cursor.execute('''
         INSERT INTO stickers (nome, caminho_imagem, pontos_custo)
@@ -105,16 +100,16 @@ def criar_sticker():
     conexao.commit()
     conexao.close()
 
-    return jsonify({"mensagem": "Sticker criado com sucesso comimagem real"}), 201
+    return jsonify({"mensagem": "Sticker criado com sucesso com imagem real"}), 201
 
 # rota para listar os stickers
 @app.route('/stickers', methods=['GET'])
 def listar_stickers():
-    # conecta o bd
-    conexao = sqlite3.connect('banco.db')
+    # conecta o bd usando o caminho dinâmico
+    conexao = sqlite3.connect(CAMINHO_BANCO)
     cursor = conexao.cursor()
 
-    # executa o comando sql paara buscar todos os registros da tabela
+    # executa o comando sql para buscar todos os registros da tabela
     cursor.execute('SELECT id, nome, caminho_imagem, pontos_custo FROM stickers')
     linhas = cursor.fetchall() # pega todas as linhas encontradas
 
@@ -129,7 +124,6 @@ def listar_stickers():
             "caminho_imagem": linha[2],
             "pontos_custo": linha[3]
         }
-
         lista_stickers.append(sticker)
 
     # devolve a lista em json
@@ -153,8 +147,8 @@ def atualizar_sticker(sticker_id):
     nome_novo = conteudo_json.get('nome')
     pontos_custo_novo = conteudo_json.get('pontos_custo')
 
-    # conecta ao bd
-    conexao = sqlite3.connect('banco.db')
+    # conecta ao bd usando o caminho dinâmico
+    conexao = sqlite3.connect(CAMINHO_BANCO)
     cursor = conexao.cursor()
 
     # verifica se o sticker existe no bd
@@ -181,7 +175,8 @@ def atualizar_sticker(sticker_id):
 @app.route('/stickers/<int:sticker_id>', methods=['DELETE'])
 @jwt_required()
 def deletar_sticker(sticker_id):
-    conexao = sqlite3.connect('banco.db')
+    # conecta ao bd usando o caminho dinâmico
+    conexao = sqlite3.connect(CAMINHO_BANCO)
     cursor = conexao.cursor()
 
     # verifica se o sticker existe
@@ -199,14 +194,6 @@ def deletar_sticker(sticker_id):
     conexao.close()
 
     return jsonify({'mensagem': f'Sticker com ID {sticker_id} deletado com sucesso'}), 200
-
-    
-
-
-
-
-
-
 
 if __name__ == '__main__':
     app.run(debug=True)
