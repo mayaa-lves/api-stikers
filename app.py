@@ -169,7 +169,7 @@ def atualizar_sticker(sticker_id):
     conexao.commit()
     conexao.close()
 
-    return jsonify({'mensagem': f'Sticker com ID {sticker_id} atualizado com sucesso'}), 200
+    return jsonify({'mensagem': f'Sticker com ID {sticker_id} updated com sucesso'}), 200
 
 # rota para deletar
 @app.route('/stickers/<int:sticker_id>', methods=['DELETE'])
