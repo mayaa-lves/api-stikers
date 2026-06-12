@@ -5,17 +5,25 @@ from flask import Flask, jsonify, request, send_from_directory
 from flask_jwt_extended import JWTManager, create_access_token, jwt_required, get_jwt_identity
 from dotenv import load_dotenv
 
+
 load_dotenv()
 
 app = Flask(__name__)
 CORS(app)
 
+app = Flask(__name__)
+CORS(app)
+
+PASTA_UPLOADS = 'uploads'
+# Adicione esta linha para evitar o erro de pasta ausente:
+if not os.path.exists(PASTA_UPLOADS):
+    os.makedirs(PASTA_UPLOADS)
+
+app.config['UPLOAD_FOLDER'] = PASTA_UPLOADS
+
 app.config["JWT_SECRET_KEY"] = os.getenv('JWT_SECRET')
 jwt = JWTManager(app)
 
-# pasta onde sera salvo as imagens dos stickers
-PASTA_UPLOADS = 'uploads'
-app.config['UPLOAD_FOLDER'] = PASTA_UPLOADS
 
 # --- CONFIGURAÇÃO DO BANCO DE DADOS (SQLite) ---
 def iniciar_banco():
@@ -36,7 +44,15 @@ def iniciar_banco():
     conexao.close()
 
 # Executa a função para criar o banco de dados assim que o código roda
-iniciar_banco()
+def iniciar_banco():
+    # Em ambiente de produção na Vercel, usa a pasta /tmp
+    if os.environ.get('VERCEL'):
+        caminho_banco = '/tmp/banco.db'
+    else:
+        caminho_banco = 'banco.db'
+        
+    conexao = sqlite3.connect(caminho_banco)
+    # ... resto do seu código de iniciar o banco
 
 # rota de boas vindas
 @app.route('/')
